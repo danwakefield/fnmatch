@@ -12,7 +12,7 @@ package fnmatch
 
 import (
 	"unicode"
-	"utf8"
+	"unicode/utf8"
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 	FNM_FILE_NAME  = FNM_PATHNAME
 )
 
-func unpackRune(str *string) int {
+func unpackRune(str *string) rune {
 	rune, size := utf8.DecodeRuneInString(*str)
 	*str = (*str)[size:]
 	return rune
@@ -50,8 +50,8 @@ func Match(pattern, s string, flags int) bool {
 	sAtStart := true
 	sLastAtStart := true
 	sLastSlash := false
-	sLastUnpacked := 0
-	unpackS := func() int {
+	sLastUnpacked := rune(0)
+	unpackS := func() rune {
 		sLastSlash = (sLastUnpacked == '/')
 		sLastUnpacked = unpackRune(&s)
 		sLastAtStart = sAtStart
@@ -146,7 +146,7 @@ func Match(pattern, s string, flags int) bool {
 	return len(s) == 0 || (leadingdir && s[0] == '/')
 }
 
-func rangematch(pattern *string, test int, flags int) bool {
+func rangematch(pattern *string, test rune, flags int) bool {
 	if len(*pattern) == 0 {
 		return false
 	}
@@ -209,7 +209,7 @@ func rangematch(pattern *string, test int, flags int) bool {
 
 // define strchr because strings.Index() seems a bit overkill
 // returns the index of c in s, or -1 if there is no match
-func strchr(s string, c int) int {
+func strchr(s string, c rune) int {
 	for i, sc := range s {
 		if sc == c {
 			return i

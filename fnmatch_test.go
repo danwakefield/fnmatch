@@ -1,21 +1,16 @@
-package fnmatch
+package fnmatch_test
 
 import (
-	"gospec"
 	"testing"
-)
 
-func TestAllSpecs(t *testing.T) {
-	r := gospec.NewRunner()
-	r.AddSpec("MatchSpec", MatchSpec)
-	gospec.MainGoTest(r, t)
-}
+	"github.com/danwakefield/fnmatch"
+)
 
 // This is a set of tests ported from a set of tests for C fnmatch
 // found at http://www.mail-archive.com/bug-gnulib@gnu.org/msg14048.html
 func TestMatch(t *testing.T) {
 	assert := func(p, s string) {
-		if !Match(p, s, 0) {
+		if !fnmatch.Match(p, s, 0) {
 			t.Errorf("Assertion failed: Match(%#v, %#v, 0)", p, s)
 		}
 	}
@@ -30,155 +25,327 @@ func TestMatch(t *testing.T) {
 	assert("foo*.txt", "foobar.txt")
 	assert("foo.txt", "foo.txt")
 	assert("foo\\.txt", "foo.txt")
-	if Match("foo\\.txt", "foo.txt", FNM_NOESCAPE) {
+	if fnmatch.Match("foo\\.txt", "foo.txt", fnmatch.FNM_NOESCAPE) {
 		t.Errorf("Assertion failed: Match(%#v, %#v, FNM_NOESCAPE) == false", "foo\\.txt", "foo.txt")
 	}
 }
 
-func MatchSpec(c *gospec.Context) {
-	c.Specify("A wildcard pattern \"*\" should match anything", func() {
-		p := "*"
-		c.Then(Match(p, "", 0)).Should.Equal(true)
-		c.Then(Match(p, "foo", 0)).Should.Equal(true)
-		c.Then(Match(p, "*", 0)).Should.Equal(true)
-		c.Then(Match(p, "   ", 0)).Should.Equal(true)
-		c.Then(Match(p, ".foo", 0)).Should.Equal(true)
-		c.Then(Match(p, "わたし", 0)).Should.Equal(true)
-		testSlash := func(flags int, result bool) {
-			c.Then(Match(p, "foo/bar", flags)).Should.Equal(result)
-			c.Then(Match(p, "/", flags)).Should.Equal(result)
-			c.Then(Match(p, "/foo", flags)).Should.Equal(result)
-			c.Then(Match(p, "foo/", flags)).Should.Equal(result)
+func TestWildcard(t *testing.T) {
+	// A wildcard pattern "*" should match anything
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		{"*", "", 0, true},
+		{"*", "foo", 0, true},
+		{"*", "*", 0, true},
+		{"*", "   ", 0, true},
+		{"*", ".foo", 0, true},
+		{"*", "わたし", 0, true},
+	}
+
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
 		}
-		c.Specify("Including / when flags is 0", func() { testSlash(0, true) })
-		c.Specify("Except / when used with FNM_PATHNAME", func() { testSlash(FNM_PATHNAME, false) })
-		c.Specify("Except . in some circumstances when used with FNM_PERIOD", func() {
-			c.Then(Match("*", ".foo", FNM_PERIOD)).Should.Equal(false)
-			c.Then(Match("/*", "/.foo", FNM_PERIOD)).Should.Equal(true)
-			c.Then(Match("/*", "/.foo", FNM_PERIOD|FNM_PATHNAME)).Should.Equal(false)
-		})
-	})
+	}
+}
 
-	c.Specify("A question mark pattern \"?\" should match a single character", func() {
-		p := "?"
-		c.Then(Match(p, "", 0)).Should.Equal(false)
-		c.Then(Match(p, "f", 0)).Should.Equal(true)
-		c.Then(Match(p, ".", 0)).Should.Equal(true)
-		c.Then(Match(p, "?", 0)).Should.Equal(true)
-		c.Then(Match(p, "foo", 0)).Should.Equal(false)
-		c.Then(Match(p, "わ", 0)).Should.Equal(true)
-		c.Then(Match(p, "わた", 0)).Should.Equal(false)
-		c.Specify("Even / when flags is 0", func() { c.Then(Match(p, "/", 0)).Should.Equal(true) })
-		c.Specify("Except / when flags is FNM_PATHNAME", func() { c.Then(Match(p, "/", FNM_PATHNAME)).Should.Equal(false) })
-		c.Specify("Except . sometimes when FNM_PERIOD is given", func() {
-			c.Then(Match("?", ".", FNM_PERIOD)).Should.Equal(false)
-			c.Then(Match("foo?", "foo.", FNM_PERIOD)).Should.Equal(true)
-			c.Then(Match("/?", "/.", FNM_PERIOD)).Should.Equal(true)
-			c.Then(Match("/?", "/.", FNM_PERIOD|FNM_PATHNAME)).Should.Equal(false)
-		})
-	})
+func TestWildcardSlash(t *testing.T) {
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		// Should match / when flags are 0
+		{"*", "foo/bar", 0, true},
+		{"*", "/", 0, true},
+		{"*", "/foo", 0, true},
+		{"*", "foo/", 0, true},
+		// Shouldnt match / when flags include FNM_PATHNAME
+		{"*", "foo/bar", fnmatch.FNM_PATHNAME, false},
+		{"*", "/", fnmatch.FNM_PATHNAME, false},
+		{"*", "/foo", fnmatch.FNM_PATHNAME, false},
+		{"*", "foo/", fnmatch.FNM_PATHNAME, false},
+	}
 
-	c.Specify("A range pattern", func() {
-		p := "[a-z]"
-		c.Specify("Should match a single character inside its range", func() {
-			c.Then(Match(p, "a", 0)).Should.Equal(true)
-			c.Then(Match(p, "q", 0)).Should.Equal(true)
-			c.Then(Match(p, "z", 0)).Should.Equal(true)
-			c.Then(Match("[わ]", "わ", 0)).Should.Equal(true)
-		})
-		c.Specify("Should not match characters outside its range", func() {
-			c.Then(Match(p, "-", 0)).Should.Equal(false)
-			c.Then(Match(p, " ", 0)).Should.Equal(false)
-			c.Then(Match(p, "D", 0)).Should.Equal(false)
-			c.Then(Match(p, "é", 0)).Should.Equal(false)
-		})
-		c.Specify("Should only match one character", func() {
-			c.Then(Match(p, "ab", 0)).Should.Equal(false)
-			c.Then(Match(p, "", 0)).Should.Equal(false)
-		})
-		c.Specify("Should not consume more of the pattern than necessary", func() { c.Then(Match(p+"foo", "afoo", 0)).Should.Equal(true) })
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+	for _, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+}
 
-		c.Specify("Should match a - if it's the first or last character or backslash-escaped", func() {
-			c.Then(Match("[-az]", "-", 0)).Should.Equal(true)
-			c.Then(Match("[-az]", "a", 0)).Should.Equal(true)
-			c.Then(Match("[-az]", "b", 0)).Should.Equal(false)
-			c.Then(Match("[az-]", "-", 0)).Should.Equal(true)
-			c.Then(Match("[a\\-z]", "-", 0)).Should.Equal(true)
-			c.Then(Match("[a\\-z]", "b", 0)).Should.Equal(false)
-			c.Specify("And ignore \\ when FNM_NOESCAPE is given", func() {
-				c.Then(Match("[a\\-z]", "\\", FNM_NOESCAPE)).Should.Equal(true)
-				c.Then(Match("[a\\-z]", "-", FNM_NOESCAPE)).Should.Equal(false)
-			})
-		})
-		c.Specify("Should be negated if starting with ^ or !", func() {
-			c.Then(Match("[^a-z]", "a", 0)).Should.Equal(false)
-			c.Then(Match("[!a-z]", "b", 0)).Should.Equal(false)
-			c.Then(Match("[!a-z]", "é", 0)).Should.Equal(true)
-			c.Then(Match("[!a-z]", "わ", 0)).Should.Equal(true)
-			c.Specify("And still match - if following the negation character", func() {
-				c.Then(Match("[^-az]", "-", 0)).Should.Equal(false)
-				c.Then(Match("[^-az]", "b", 0)).Should.Equal(true)
-			})
-		})
-		c.Specify("Should support multiple characters/ranges", func() {
-			c.Then(Match("[abc]", "a", 0)).Should.Equal(true)
-			c.Then(Match("[abc]", "c", 0)).Should.Equal(true)
-			c.Then(Match("[abc]", "d", 0)).Should.Equal(false)
-			c.Then(Match("[a-cg-z]", "c", 0)).Should.Equal(true)
-			c.Then(Match("[a-cg-z]", "h", 0)).Should.Equal(true)
-			c.Then(Match("[a-cg-z]", "d", 0)).Should.Equal(false)
-		})
-		c.Specify("Should not match / when flags is FNM_PATHNAME", func() {
-			c.Then(Match("[abc/def]", "/", 0)).Should.Equal(true)
-			c.Then(Match("[abc/def]", "/", FNM_PATHNAME)).Should.Equal(false)
-			c.Then(Match("[.-0]", "/", 0)).Should.Equal(true) // .-0 includes /
-			c.Then(Match("[.-0]", "/", FNM_PATHNAME)).Should.Equal(false)
-		})
-		c.Specify("Should normally be case-sensitive", func() {
-			c.Then(Match("[a-z]", "A", 0)).Should.Equal(false)
-			c.Then(Match("[A-Z]", "a", 0)).Should.Equal(false)
-			c.Specify("Except when FNM_CASEFOLD is given", func() {
-				c.Then(Match("[a-z]", "A", FNM_CASEFOLD)).Should.Equal(true)
-				c.Then(Match("[A-Z]", "a", FNM_CASEFOLD)).Should.Equal(true)
-			})
-		})
-		// What about [a-c-f]? How should that behave? It's undocumented.
-	})
+func TestWildcardFNMPeriod(t *testing.T) {
+	// FNM_PERIOD means that . is not matched in some circumstances.
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		{"*", ".foo", fnmatch.FNM_PERIOD, false},
+		{"/*", "/.foo", fnmatch.FNM_PERIOD, true},
+		{"/*", "/.foo", fnmatch.FNM_PERIOD | fnmatch.FNM_PATHNAME, false},
+	}
 
-	c.Specify("A backslash should escape the following character", func() {
-		c.Then(Match("\\\\", "\\", 0)).Should.Equal(true)
-		c.Then(Match("\\*", "*", 0)).Should.Equal(true)
-		c.Then(Match("\\*", "foo", 0)).Should.Equal(false)
-		c.Then(Match("\\?", "?", 0)).Should.Equal(true)
-		c.Then(Match("\\?", "f", 0)).Should.Equal(false)
-		c.Then(Match("\\[a-z]", "[a-z]", 0)).Should.Equal(true)
-		c.Then(Match("\\[a-z]", "a", 0)).Should.Equal(false)
-		c.Then(Match("\\foo", "foo", 0)).Should.Equal(true)
-		c.Then(Match("\\わ", "わ", 0)).Should.Equal(true)
-		c.Specify("Unless FNM_NOESCAPE is given", func() {
-			c.Then(Match("\\\\", "\\", FNM_NOESCAPE)).Should.Equal(false)
-			c.Then(Match("\\\\", "\\\\", FNM_NOESCAPE)).Should.Equal(true)
-			c.Then(Match("\\*", "foo", FNM_NOESCAPE)).Should.Equal(false)
-			c.Then(Match("\\*", "\\*", FNM_NOESCAPE)).Should.Equal(true)
-		})
-	})
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+}
 
-	c.Specify("Literal characters should match themselves", func() {
-		c.Then(Match("foo", "foo", 0)).Should.Equal(true)
-		c.Then(Match("foo", "foobar", 0)).Should.Equal(false)
-		c.Then(Match("foobar", "foo", 0)).Should.Equal(false)
-		c.Then(Match("foo", "Foo", 0)).Should.Equal(false)
-		c.Then(Match("わたし", "わたし", 0)).Should.Equal(true)
-		c.Specify("And perform case-folding when FNM_CASEFOLD is given", func() {
-			c.Then(Match("foo", "FOO", FNM_CASEFOLD)).Should.Equal(true)
-			c.Then(Match("FoO", "fOo", FNM_CASEFOLD)).Should.Equal(true)
-		})
-	})
+func TestQuestionMark(t *testing.T) {
+	//A question mark pattern "?" should match a single character
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		{"?", "", 0, false},
+		{"?", "f", 0, true},
+		{"?", ".", 0, true},
+		{"?", "?", 0, true},
+		{"?", "foo", 0, false},
+		{"?", "わ", 0, true},
+		{"?", "わた", 0, false},
+		// Even '/' when flags are 0
+		{"?", "/", 0, true},
+		// Except '/' when flags include FNM_PATHNAME
+		{"?", "/", fnmatch.FNM_PATHNAME, false},
+	}
 
-	c.Specify("FNM_LEADING_DIR should ignore trailing /*", func() {
-		c.Then(Match("foo", "foo/bar", 0)).Should.Equal(false)
-		c.Then(Match("foo", "foo/bar", FNM_LEADING_DIR)).Should.Equal(true)
-		c.Then(Match("*", "foo/bar", FNM_PATHNAME)).Should.Equal(false)
-		c.Then(Match("*", "foo/bar", FNM_PATHNAME|FNM_LEADING_DIR)).Should.Equal(true)
-	})
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+}
+
+func TestQuestionMarkExceptions(t *testing.T) {
+	//When flags include FNM_PERIOD a '?' might not match a '.' character.
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		{"?", ".", fnmatch.FNM_PERIOD, false},
+		{"foo?", "foo.", fnmatch.FNM_PERIOD, true},
+		{"/?", "/.", fnmatch.FNM_PERIOD, true},
+		{"/?", "/.", fnmatch.FNM_PERIOD | fnmatch.FNM_PATHNAME, false},
+	}
+
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+}
+
+func TestRange(t *testing.T) {
+	azPat := "[a-z]"
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		// Should match a single character inside its range
+		{azPat, "a", 0, true},
+		{azPat, "q", 0, true},
+		{azPat, "z", 0, true},
+		{"[わ]", "わ", 0, true},
+
+		// Should not match characters outside its range
+		{azPat, "-", 0, false},
+		{azPat, " ", 0, false},
+		{azPat, "D", 0, false},
+		{azPat, "é", 0, false},
+
+		//Should only match one character
+		{azPat, "ab", 0, false},
+		{azPat, "", 0, false},
+
+		// Should not consume more of the pattern than necessary
+		{azPat + "foo", "afoo", 0, true},
+
+		// Should match '-' if it is the first/last character or is
+		// backslash escaped
+		{"[-az]", "-", 0, true},
+		{"[-az]", "a", 0, true},
+		{"[-az]", "b", 0, false},
+		{"[az-]", "-", 0, true},
+		{"[a\\-z]", "-", 0, true},
+		{"[a\\-z]", "b", 0, false},
+
+		// ignore '\\' when FNM_NOESCAPE is given
+		{"[a\\-z]", "\\", fnmatch.FNM_NOESCAPE, true},
+		{"[a\\-z]", "-", fnmatch.FNM_NOESCAPE, false},
+
+		// Should be negated if starting with ^ or !"
+		{"[^a-z]", "a", 0, false},
+		{"[!a-z]", "b", 0, false},
+		{"[!a-z]", "é", 0, true},
+		{"[!a-z]", "わ", 0, true},
+
+		// Still match '-' if following the negation character
+		{"[^-az]", "-", 0, false},
+		{"[^-az]", "b", 0, true},
+
+		// Should support multiple characters/ranges
+		{"[abc]", "a", 0, true},
+		{"[abc]", "c", 0, true},
+		{"[abc]", "d", 0, false},
+		{"[a-cg-z]", "c", 0, true},
+		{"[a-cg-z]", "h", 0, true},
+		{"[a-cg-z]", "d", 0, false},
+
+		//Should not match '/' when flags is FNM_PATHNAME
+		{"[abc/def]", "/", 0, true},
+		{"[abc/def]", "/", fnmatch.FNM_PATHNAME, false},
+		{"[.-0]", "/", 0, true}, // The range [.-0] includes /
+		{"[.-0]", "/", fnmatch.FNM_PATHNAME, false},
+
+		// Should normally be case-sensitive
+		{"[a-z]", "A", 0, false},
+		{"[A-Z]", "a", 0, false},
+		//Except when FNM_CASEFOLD is given
+		{"[a-z]", "A", fnmatch.FNM_CASEFOLD, true},
+		{"[A-Z]", "a", fnmatch.FNM_CASEFOLD, true},
+	}
+
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+}
+
+func TestBackSlash(t *testing.T) {
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		//A backslash should escape the following characters
+		{"\\\\", "\\", 0, true},
+		{"\\*", "*", 0, true},
+		{"\\*", "foo", 0, false},
+		{"\\?", "?", 0, true},
+		{"\\?", "f", 0, false},
+		{"\\[a-z]", "[a-z]", 0, true},
+		{"\\[a-z]", "a", 0, false},
+		{"\\foo", "foo", 0, true},
+		{"\\わ", "わ", 0, true},
+
+		// Unless FNM_NOESCAPE is given
+		{"\\\\", "\\", fnmatch.FNM_NOESCAPE, false},
+		{"\\\\", "\\\\", fnmatch.FNM_NOESCAPE, true},
+		{"\\*", "foo", fnmatch.FNM_NOESCAPE, false},
+		{"\\*", "\\*", fnmatch.FNM_NOESCAPE, true},
+	}
+
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+}
+
+func TestLiteral(t *testing.T) {
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		//Literal characters should match themselves
+		{"foo", "foo", 0, true},
+		{"foo", "foobar", 0, false},
+		{"foobar", "foo", 0, false},
+		{"foo", "Foo", 0, false},
+		{"わたし", "わたし", 0, true},
+		// And perform case-folding when FNM_CASEFOLD is given
+		{"foo", "FOO", fnmatch.FNM_CASEFOLD, true},
+		{"FoO", "fOo", fnmatch.FNM_CASEFOLD, true},
+	}
+
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
+}
+
+func TestFNMLeadingDir(t *testing.T) {
+	cases := []struct {
+		pattern string
+		input   string
+		flags   int
+		want    bool
+	}{
+		// FNM_LEADING_DIR should ignore trailing '/*'
+		{"foo", "foo/bar", 0, false},
+		{"foo", "foo/bar", fnmatch.FNM_LEADING_DIR, true},
+		{"*", "foo/bar", fnmatch.FNM_PATHNAME, false},
+		{"*", "foo/bar", fnmatch.FNM_PATHNAME | fnmatch.FNM_LEADING_DIR, true},
+	}
+
+	for tc, c := range cases {
+		got := fnmatch.Match(c.pattern, c.input, c.flags)
+		if got != c.want {
+			t.Errorf(
+				"Testcase #%d failed: fnmatch.Match('%s', '%s', %d) should be %v not %v",
+				tc, c.pattern, c.input, c.flags, c.want, got,
+			)
+		}
+	}
 }
