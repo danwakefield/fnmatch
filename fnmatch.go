@@ -85,10 +85,8 @@ func Match(pattern, s string, flags int) bool {
 			if len(pattern) == 0 {
 				if pathname {
 					return leadingdir || (strchr(s, '/') == -1)
-				} else {
-					return true
 				}
-				return !(pathname && strchr(s, '/') >= 0)
+				return true
 			} else if pathname && pattern[0] == '/' {
 				offset := strchr(s, '/')
 				if offset == -1 {
