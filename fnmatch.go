@@ -1,6 +1,6 @@
+// Provide string-matching based on fnmatch.3
 package fnmatch
 
-// Provide string-matching based on fnmatch.3
 // There are a few issues that I believe to be bugs, but this implementation is
 // based as closely as possible on BSD fnmatch. These bugs are present in the
 // source of BSD fnmatch, and so are replicated here. The issues are as follows:

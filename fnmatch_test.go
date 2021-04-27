@@ -3,7 +3,7 @@ package fnmatch_test
 import (
 	"testing"
 
-	"github.com/danwakefield/fnmatch"
+	"github.com/gandarez/fnmatch"
 )
 
 // This is a set of tests ported from a set of tests for C fnmatch
