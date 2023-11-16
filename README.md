@@ -1,4 +1,4 @@
 # fnmatch
-Updated clone of kballards golang fnmatch gist (https://gist.github.com/kballard/272720)
+Updated clone of lilyballs golang fnmatch gist (https://gist.github.com/lilyball/272720)
 
 
